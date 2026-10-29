@@ -29,7 +29,21 @@ macros:
       - name: connection_tags
         type: list[dict[string,any]]
         description: |
-          Version tags that swap the warehouse connection, e.g. one tag per region or environment. Each entry is a dict with `name` (required, unique within the model) and `connection_id` (required, the target Sigma connection id). An optional `paths` list overrides the source mapping for models with multiple connections: each path dict accepts `from_connection_id`, `from_path`, and `to_path` keys. Tags land in `meta.sigma_data_model_connection_tags` alongside `meta.sigma_data_model`; the spec itself is unchanged. A downstream sync tool uses these to call `POST /v2/dataModels/tag` with `sourceMappingConfig` after every spec update. Duplicate names and missing `connection_id` both raise a compiler error, as does a path whose `from_connection_id` doesn't match any table in the model. Default `[]`.
+          Version tags that swap the warehouse connection, e.g. one tag per region or environment. Each entry is a dict with `name` (required, unique within the model) and `connection_id` (required, the target Sigma connection id; `connectionId` is accepted too). An optional `paths` list overrides the source mapping: each path dict accepts `from_connection_id`, `from_path` and `to_path` (camelCase spellings are accepted too). `from_path` and `to_path` are lists of 1 to 3 non-empty strings - `[database]`, `[database, schema]` or `[database, schema, table]` - and must be set together; a `from_path` may appear only once per tag (per `from_connection_id`). Use `sigma_data_models.connection_tag_paths()` to generate table-level paths. Tags land in `meta.sigma_data_model_connection_tags` alongside `meta.sigma_data_model`; the spec itself is unchanged. A downstream sync tool uses these to call `POST /v2/dataModels/tag` with `sourceMappingConfig` after every spec update. Duplicate or empty names, a missing `connection_id`, conflicting spellings, malformed or duplicate paths, and a `from_connection_id` that doesn't match any table in the model all raise a compiler error. How overlapping paths (e.g. schema-level plus table-level) resolve is up to Sigma's tag API and is not checked here. Default `[]`.
+
+  - name: connection_tag_paths
+    description: |
+      Maps each table's own `[database, schema, table]` source path to a table-level path on a tagged connection, for use in a `connection_tags` entry's `paths`. Returns a list of `{from_path, to_path}` dicts. Concatenate several calls to map different table groups to different databases or schemas.
+    arguments:
+      - name: tables
+        type: list[dict[string,any]]
+        description: Tables returned by `sigma_data_models.table(...)`.
+      - name: to_database
+        type: string
+        description: Database to map to. Defaults to each table's own database.
+      - name: to_schema
+        type: string
+        description: Schema to map to. Defaults to each table's own schema.
 
   - name: control
     description: |
@@ -187,7 +201,7 @@ macros:
 
   - name: materialize
     description: |
-      Wires a composed `sigma_data_models.model(...)` spec into the dbt model's `config(meta=...)`, where it lands in `manifest.json` on `dbt parse`/`dbt compile`. Replaces `meta` wholesale rather than merging it - other `meta` keys set on the same model (directly or via `dbt_project.yml`) will be dropped.
+      Wires a composed `sigma_data_models.model(...)` spec into the dbt model's `config(meta=...)`, where it lands in `manifest.json` on `dbt parse`/`dbt compile`. When the spec carries `connection_tags`, also sets `meta.sigma_data_model_connection_tags`. Replaces `meta` wholesale rather than merging it - other `meta` keys set on the same model (directly or via `dbt_project.yml`) will be dropped.
     arguments:
       - name: spec
         type: dict[string,any]

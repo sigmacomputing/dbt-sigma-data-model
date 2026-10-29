@@ -566,6 +566,39 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: model with no connection_tags must have empty _connection_tags list') %}
 {% endif %}
 
+{# Connection tag paths: both spellings normalize to camelCase, and connection_tag_paths() maps
+   each table to a table-level path, optionally into a different database. #}
+{% set path_tables = [
+  sigma_data_models.table('local_accounts', database='dbt_sigma', schema='usage', identifier='accounts',
+    connection_id='conn-primary', columns=['account_guid']),
+  sigma_data_models.table('repl_employees', database='dbt_sigma_replication', schema='ref', identifier='employees',
+    connection_id='conn-primary', columns=['employee_guid']),
+] %}
+{% set helper_paths = sigma_data_models.connection_tag_paths([path_tables[0]], to_database='eu_local')
+  + sigma_data_models.connection_tag_paths([path_tables[1]], to_database='eu_repl', to_schema='ref_eu') %}
+{% if helper_paths[0].to_path != ['eu_local', 'usage', 'accounts'] or helper_paths[1].to_path != ['eu_repl', 'ref_eu', 'employees'] or helper_paths[1].from_path != ['dbt_sigma_replication', 'ref', 'employees'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: connection_tag_paths must map each table to a table-level path with to_database/to_schema overrides, got ' ~ helper_paths) %}
+{% endif %}
+{% set paths_spec = sigma_data_models.model(
+  name='Connection Tag Paths Check',
+  tables=path_tables,
+  connection_tags=[
+    {'name': 'EU', 'connectionId': 'conn-eu', 'paths': helper_paths + [
+      {'fromConnectionId': 'conn-primary', 'from_path': ['legacy_db'], 'to_path': ['eu_legacy']},
+    ]},
+  ],
+) %}
+{% set paths_tag = paths_spec._connection_tags[0] %}
+{% if paths_tag.connectionId != 'conn-eu' or paths_tag.paths | length != 3 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: connectionId spelling must be accepted and all paths emitted, got ' ~ paths_tag) %}
+{% endif %}
+{% if paths_tag.paths[0] != {'fromPath': ['dbt_sigma', 'usage', 'accounts'], 'toPath': ['eu_local', 'usage', 'accounts']} %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: tag paths must emit fromPath/toPath, got ' ~ paths_tag.paths[0]) %}
+{% endif %}
+{% if paths_tag.paths[2] != {'fromConnectionId': 'conn-primary', 'fromPath': ['legacy_db'], 'toPath': ['eu_legacy']} %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: tag paths must normalize camelCase/snake_case keys, got ' ~ paths_tag.paths[2]) %}
+{% endif %}
+
 {{ log('assert_sigma_spec: all assertions passed', info=true) }}
 {% endmacro %}
 
@@ -765,4 +798,64 @@
   connection_tags=[{'name': 'EU', 'connection_id': 'conn-eu',
          'paths': [{'from_connection_id': 'conn-nonexistent'}]}],
 ) %}
+{% endmacro %}
+
+{% macro assert_empty_connection_tag_name_rejected() %}
+{% do sigma_data_models.model(
+  name='empty_connection_tag_name',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': '', 'connection_id': 'conn-a'}],
+) %}
+{% endmacro %}
+
+{% macro assert_empty_connection_tag_path_rejected() %}
+{% do sigma_data_models.model(
+  name='empty_connection_tag_path',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': 'T', 'connection_id': 'conn-a', 'paths': [{'from_path': [], 'to_path': ['x']}]}],
+) %}
+{% endmacro %}
+
+{% macro assert_overlong_connection_tag_path_rejected() %}
+{% do sigma_data_models.model(
+  name='overlong_connection_tag_path',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': 'T', 'connection_id': 'conn-a', 'paths': [{'from_path': ['a','b','c','d'], 'to_path': ['x']}]}],
+) %}
+{% endmacro %}
+
+{% macro assert_nonstring_connection_tag_path_rejected() %}
+{% do sigma_data_models.model(
+  name='nonstring_connection_tag_path',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': 'T', 'connection_id': 'conn-a', 'paths': [{'from_path': ['a', 1], 'to_path': ['x']}]}],
+) %}
+{% endmacro %}
+
+{% macro assert_unpaired_connection_tag_path_rejected() %}
+{% do sigma_data_models.model(
+  name='unpaired_connection_tag_path',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': 'T', 'connection_id': 'conn-a', 'paths': [{'from_path': ['a']}]}],
+) %}
+{% endmacro %}
+
+{% macro assert_duplicate_connection_tag_from_path_rejected() %}
+{% do sigma_data_models.model(
+  name='duplicate_connection_tag_from_path',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': 'T', 'connection_id': 'conn-a', 'paths': [{'from_path': ['a'], 'to_path': ['x']}, {'from_path': ['a'], 'to_path': ['y']}]}],
+) %}
+{% endmacro %}
+
+{% macro assert_conflicting_connection_tag_connection_id_rejected() %}
+{% do sigma_data_models.model(
+  name='conflicting_connection_tag_connection_id',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  connection_tags=[{'name': 'T', 'connection_id': 'conn-a', 'connectionId': 'conn-b'}],
+) %}
+{% endmacro %}
+
+{% macro assert_connection_tag_paths_bad_table_rejected() %}
+{% do sigma_data_models.connection_tag_paths([{'key': 'bad', 'source': {'kind': 'warehouse-table', 'path': ['only', 'two']}}]) %}
 {% endmacro %}

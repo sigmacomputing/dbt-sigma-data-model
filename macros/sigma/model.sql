@@ -101,38 +101,7 @@
    connection_id, so a sync tool can call POST /v2/dataModels/tag with sourceMappingConfig.
    Tags are stored as _connection_tags in the returned dict and extracted by materialize() into
    the separate meta.sigma_data_model_connection_tags key, leaving the spec itself unchanged. #}
-{% set connection_tag_names = [] %}
-{% set frozen_connection_tags = [] %}
-{% for connection_tag in connection_tags %}
-  {% if not connection_tag.name %}
-    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): each connection_tag must have a non-empty 'name'.") %}
-  {% endif %}
-  {% if connection_tag.name in connection_tag_names %}
-    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): duplicate connection_tag name '" ~ connection_tag.name ~ "' - connection_tag names must be unique within a model.") %}
-  {% endif %}
-  {% do connection_tag_names.append(connection_tag.name) %}
-  {% if not connection_tag.connection_id %}
-    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): connection_tag '" ~ connection_tag.name ~ "' is missing required 'connection_id'.") %}
-  {% endif %}
-  {% for path in (connection_tag.paths if connection_tag.paths is defined else []) %}
-    {% if path.from_connection_id is defined and path.from_connection_id not in table_connection_ids %}
-      {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): connection_tag '" ~ connection_tag.name ~ "' path references from_connection_id '" ~ path.from_connection_id ~ "' which no table in this model uses.") %}
-    {% endif %}
-  {% endfor %}
-  {% set frozen_connection_tag = {'name': connection_tag.name, 'connectionId': connection_tag.connection_id} %}
-  {% if connection_tag.paths is defined %}
-    {% set frozen_paths = [] %}
-    {% for path in connection_tag.paths %}
-      {% set fp = {} %}
-      {% if path.from_connection_id is defined %}{% do fp.update({'fromConnectionId': path.from_connection_id}) %}{% endif %}
-      {% if path.from_path is defined %}{% do fp.update({'fromPath': path.from_path}) %}{% endif %}
-      {% if path.to_path is defined %}{% do fp.update({'toPath': path.to_path}) %}{% endif %}
-      {% do frozen_paths.append(fp) %}
-    {% endfor %}
-    {% do frozen_connection_tag.update({'paths': frozen_paths}) %}
-  {% endif %}
-  {% do frozen_connection_tags.append(frozen_connection_tag) %}
-{% endfor %}
+{% set frozen_connection_tags = sigma_data_models.validate_connection_tags(name, connection_tags, table_connection_ids) %}
 
 {# Group tables into pages by their _page field, in first-appearance order. Tables with no
    _page set land on the default page, named by page_name (falling back to name). When all

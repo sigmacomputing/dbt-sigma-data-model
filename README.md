@@ -82,6 +82,7 @@ Top-level data model — assembles one or more tables into a single Sigma page a
 - `page_name` (optional): Display name for the page. Default is `none`.
 - `folder_id` (optional): Sigma folder id to publish into. Defaults to the `sigma_folder_id` project var.
 - `data_model_id` (optional): Sigma-assigned data model id for targeting an update instead of a create. Default is `none` — omit until you have the id from a first-time sync.
+- `connection_tags` (optional): Version tags that swap the warehouse connection. See [Connection tags](#connection-tags). Default is `[]`.
 
 `key` must be unique across all entries in `tables` — it's what `relationships` resolves `from`/`to` against, so a duplicate is genuinely ambiguous and raises a compiler error.
 
@@ -356,6 +357,45 @@ Note that `config(meta=...)` replaces `meta` wholesale rather than merging — i
 
 ```sql
 {{ sigma_data_models.materialize(sigma_data_model) }}
+```
+
+## Connection tags
+
+`connection_tags` on `model()` declares version tags that point the same data model at a different Sigma connection (one per region or environment). `materialize()` emits them as `meta.sigma_data_model_connection_tags`, next to `meta.sigma_data_model`; the spec itself doesn't change. A downstream sync tool uses them to call `POST /v2/dataModels/tag` with `sourceMappingConfig`. This package never calls the API.
+
+```sql
+connection_tags=[
+  {'name': 'EU', 'connection_id': 'conn-eu', 'paths': [
+    {'from_path': ['dbt_sigma', 'usage'], 'to_path': ['eu_dbt_sigma', 'usage']},
+  ]},
+]
+```
+
+- `name` (unique) and `connection_id` are required; `connectionId` is accepted as an alias.
+- `paths` is optional. Each entry takes `from_path` and `to_path` (both required together) and optionally `from_connection_id` (must match a table's connection). camelCase spellings are accepted.
+- A path is a list of 1 to 3 non-empty strings: `[database]`, `[database, schema]` or `[database, schema, table]`.
+- A `from_path` may appear only once per tag.
+- When entries overlap (say a schema-level path plus a table-level path for a table in that schema), resolution is up to Sigma's tag API; this package doesn't resolve or check it.
+- Validation runs in `model()`. A model that sets `meta.sigma_data_model_connection_tags` by hand skips it.
+
+### sigma_data_models.connection_tag_paths
+([source](macros/sigma/connection_tags.sql))
+
+Builds table-level `paths` from a list of tables, so a tag doesn't need one hand-written entry per table. `to_database` / `to_schema` override that part of each table's own path; the table name is kept. Concatenate calls to map table groups to different databases, e.g. regionally built tables next to tables replicated from a primary region:
+
+```sql
+{% set local = [sigma_data_models.table('usage', 'usage_events', columns=['event_id'])] %}
+{% set replicated = [sigma_data_models.table('accounts', 'accounts', columns=['account_guid'])] %}
+{% set spec = sigma_data_models.model(
+    name='Usage',
+    tables=local + replicated,
+    connection_tags=[{
+      'name': 'EU',
+      'connection_id': 'conn-eu',
+      'paths': sigma_data_models.connection_tag_paths(local, to_database='dbt_sigma')
+             + sigma_data_models.connection_tag_paths(replicated, to_database='dbt_sigma_replication'),
+    }],
+) %}
 ```
 
 ## Frozen element ids
