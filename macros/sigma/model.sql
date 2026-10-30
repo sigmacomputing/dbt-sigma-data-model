@@ -189,7 +189,7 @@
     {% do elements.append(clean_control) %}
   {% endfor %}
   {% do output_pages.append({
-    "id": "",
+    "id": sigma_data_models.freeze_id('page:' ~ pname),
     "name": pname,
     "elements": elements,
   }) %}
