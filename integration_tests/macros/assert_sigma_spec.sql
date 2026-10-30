@@ -47,8 +47,8 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: model() must produce exactly one page') %}
 {% endif %}
 {% set page = model_spec.pages[0] %}
-{% if page.id != '' %}
-  {% do exceptions.raise_compiler_error("assert_sigma_spec: page.id must be left blank ('') - Sigma assigns it on creation, per create-a-data-model-from-a-code-representation.md") %}
+{% if page.id != sigma_data_models.freeze_id('page:' ~ page.name) %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: page.id must be frozen from the page name (an empty id is rejected by Sigma when a page is added to an existing model), got '" ~ page.id ~ "'") %}
 {% endif %}
 {% if page.elements | length != 3 %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: page must contain one element per table plus one per control, got ' ~ (page.elements | length)) %}
@@ -511,6 +511,12 @@
 {% endif %}
 {% if multi_page_spec.pages[0].elements | length != 1 or multi_page_spec.pages[1].elements | length != 1 %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: each table must appear on its assigned page only') %}
+{% endif %}
+{% if not multi_page_spec.pages[0].id or not multi_page_spec.pages[1].id or multi_page_spec.pages[0].id == multi_page_spec.pages[1].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: every page must have a non-empty, distinct id') %}
+{% endif %}
+{% if multi_page_spec.pages[0].id != sigma_data_models.model(name='Multi Page Check', tables=[sigma_data_models.table('x', identifier='accounts', columns=['account_guid'], page='Core')]).pages[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a page id must depend only on its name, so it is stable across recompiles and other model changes') %}
 {% endif %}
 {# Cross-page relationship: resolves correctly even when source and target are on different pages. #}
 {% if 'relationships' not in multi_page_spec.pages[0].elements[0] %}

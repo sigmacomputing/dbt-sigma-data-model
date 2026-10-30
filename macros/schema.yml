@@ -3,7 +3,7 @@ version: 2
 macros:
   - name: model
     description: |
-      Top-level Sigma data model. Assembles composed tables into a single page and resolves `relationships` into the real Sigma shape (nested under each relationship's source table, referencing the target table's real element id) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-table-and-a-relationship. `page.id` is left `''`, since Sigma assigns it on creation. Strips internal-only fields (`key`, `_column_ids`) from each table before emitting.
+      Top-level Sigma data model. Assembles composed tables into a single page and resolves `relationships` into the real Sigma shape (nested under each relationship's source table, referencing the target table's real element id) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-table-and-a-relationship. Each `page.id` is frozen from the page name (`freeze_id('page:' ~ name)`), so a page added to an existing data model syncs without an empty id; a sync that copies ids from live pages still wins for pages that already exist. Strips internal-only fields (`key`, `_column_ids`) from each table before emitting.
     arguments:
       - name: name
         type: string
