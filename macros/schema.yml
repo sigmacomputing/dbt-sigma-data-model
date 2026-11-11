@@ -91,6 +91,9 @@ macros:
       - name: page
         type: string
         description: Name of the page this table should appear on within a multi-page model. Tables sharing the same `page=` value are grouped together; pages are emitted in first-appearance order across the `tables` list. Omit (or leave `none`) to place this table on the default page, named by `page_name` on `sigma_data_models.model()` (falling back to the model's `name`).
+      - name: freeze_database
+        type: string
+        description: Database hashed in place of `database` when freezing ids (lowercased, like `database`). Set it to the table's previous database when moving a table between databases so every table, column, metric, folder and filter id stays unchanged; setting it to the current database pins today's ids ahead of a move. Applies to the resolved database, so it also works when `database` defaulted from `target.database`. Affects ids only - `source.path` keeps the real database. `none` or empty string (default) hashes `database`. `schema`/`identifier` still participate in the hash.
 
   - name: column
     description: |
