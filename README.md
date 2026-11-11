@@ -378,7 +378,17 @@ Ids hash the physical identifier, so renaming a table (a dbt model rename, an `a
 sigma_data_models.table('accounts', 'ACCOUNTS_V2', freeze_name='ACCOUNTS', columns=[...])
 ```
 
-`freeze_name` replaces `identifier` in the hashed path only (lowercased the same way); `source.path` and default passthrough formulas still use the real `identifier`. Setting it to the table's *current* name pins today's ids, so it can be added before a rename ships. `database` and `schema` still participate in the hash, so moving a table between schemas still re-ids it.
+`freeze_name` replaces `identifier` in the hashed path only (lowercased the same way); `source.path` and default passthrough formulas still use the real `identifier`. Setting it to the table's *current* name pins today's ids, so it can be added before a rename ships. `database` still participates in the hash, and so does `schema` unless pinned with `freeze_schema` (below); the two pins compose.
+
+### Moving a table between schemas without changing ids
+
+Ids hash the physical schema, so moving a table (a warehouse migration, a schema reorganisation) re-ids it and everything under it, orphaning anything that references those ids. The same applies across environments when `schema` is omitted: it defaults to `target.schema`, so dev and prod compile to different ids. Pass `freeze_schema` with the table's previous (or production) schema to keep the ids stable:
+
+```sql
+sigma_data_models.table('accounts', 'ACCOUNTS', database='DB', schema='SCH_NEW', freeze_schema='SCH', columns=[...])
+```
+
+`freeze_schema` replaces the schema in the hashed path only (lowercased the same way); `source.path` still uses the real schema. Setting it to the table's *current* schema pins today's ids, so it can be added before a move ships. `database` and `identifier` still participate in the hash.
 
 `connection_id`/`folder_id` default to the `sigma_connection_id`/`sigma_folder_id` project vars (set once for the org/workspace), and can be overridden per table (`connection_id`) or per model (`folder_id`):
 
