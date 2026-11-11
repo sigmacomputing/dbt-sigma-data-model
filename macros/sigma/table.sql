@@ -1,4 +1,4 @@
-{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none, freeze_name=none, freeze_schema=none) %}
+{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none, freeze_name=none, freeze_schema=none, freeze_database=none) %}
 {% set database = database or target.database %}
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
@@ -19,13 +19,16 @@
    identifier portion is lowercased because unquoted identifiers get uppercased by some
    adapters (e.g. Snowflake) - without this, the same physical table could freeze to different
    ids depending on which casing a caller (or environment) happens to pass in. #}
-{# `freeze_name` / `freeze_schema`, when set, stand in for `identifier` / `schema` in the hashed
-   path only, so a warehouse rename or schema move (or dev vs prod `target.schema`) doesn't re-id
-   the table. `source.path` and default formulas still use the real values, since those must
-   match the live catalog. Unset/empty falls back to the real value. They are independent. #}
+{# `freeze_name` / `freeze_schema` / `freeze_database`, when set, stand in for `identifier` /
+   `schema` / `database` in the hashed path only, so a warehouse rename, schema move or database
+   move (or dev vs prod `target.schema` / `target.database`) doesn't re-id the table. They apply
+   to the resolved values, so they also work when `database`/`schema` defaulted from the target.
+   `source.path` and default formulas still use the real values, since those must match the live
+   catalog. Unset/empty falls back to the real value. They are independent. #}
 {% set freeze_identifier = freeze_name or identifier %}
 {% set hash_schema = freeze_schema or schema %}
-{% set identifier_path = (database ~ '.' ~ hash_schema ~ '.' ~ freeze_identifier) | lower %}
+{% set hash_database = freeze_database or database %}
+{% set identifier_path = (hash_database ~ '.' ~ hash_schema ~ '.' ~ freeze_identifier) | lower %}
 {% set freeze_scope = key ~ '@' ~ identifier_path %}
 
 {% if not columns %}
