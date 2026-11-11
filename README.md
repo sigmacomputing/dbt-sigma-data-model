@@ -370,6 +370,16 @@ The identifier portion is lowercased before hashing, so the same physical table 
 
 What this does **not** guarantee for the ids this package *does* freeze (table/column/metric/folder/filter/relationship): Sigma-side permanence. Per Sigma's own docs, on the first live sync Sigma may assign its own internal id to an element, independent of what's frozen here — the only way to learn the real id is a round trip against the live API, which is outside what a dbt macro can do at compile time. So treat `freeze_id` as a guarantee of *compile-time* determinism (no diff noise across recompiles), not a promise that the id you see in `manifest.json` is the one Sigma ends up using.
 
+### Moving a table between schemas without changing ids
+
+Ids hash the physical schema, so moving a table (a warehouse migration, a schema reorganisation) re-ids it and everything under it, orphaning anything that references those ids. The same applies across environments when `schema` is omitted: it defaults to `target.schema`, so dev and prod compile to different ids. Pass `freeze_schema` with the table's previous (or production) schema to keep the ids stable:
+
+```sql
+sigma_data_models.table('accounts', 'ACCOUNTS', database='DB', schema='SCH_NEW', freeze_schema='SCH', columns=[...])
+```
+
+`freeze_schema` replaces the schema in the hashed path only (lowercased the same way); `source.path` still uses the real schema. Setting it to the table's *current* schema pins today's ids, so it can be added before a move ships. `database` and `identifier` still participate in the hash.
+
 `connection_id`/`folder_id` default to the `sigma_connection_id`/`sigma_folder_id` project vars (set once for the org/workspace), and can be overridden per table (`connection_id`) or per model (`folder_id`):
 
 ```yaml

@@ -1,4 +1,4 @@
-{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none) %}
+{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none, freeze_schema=none) %}
 {% set database = database or target.database %}
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
@@ -19,7 +19,12 @@
    identifier portion is lowercased because unquoted identifiers get uppercased by some
    adapters (e.g. Snowflake) - without this, the same physical table could freeze to different
    ids depending on which casing a caller (or environment) happens to pass in. #}
-{% set identifier_path = (database ~ '.' ~ schema ~ '.' ~ identifier) | lower %}
+{# `freeze_schema`, when set, stands in for the resolved `schema` (including one defaulted from
+   `target.schema`) in the hashed path only, so a schema move - or dev vs prod schemas - doesn't
+   re-id the table. `source.path` still uses the real schema, since it must match the live
+   catalog. Unset/empty falls back to it. #}
+{% set hash_schema = freeze_schema or schema %}
+{% set identifier_path = (database ~ '.' ~ hash_schema ~ '.' ~ identifier) | lower %}
 {% set freeze_scope = key ~ '@' ~ identifier_path %}
 
 {% if not columns %}
