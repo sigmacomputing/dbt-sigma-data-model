@@ -1,4 +1,4 @@
-{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none) %}
+{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none, freeze_name=none) %}
 {% set database = database or target.database %}
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
@@ -19,7 +19,11 @@
    identifier portion is lowercased because unquoted identifiers get uppercased by some
    adapters (e.g. Snowflake) - without this, the same physical table could freeze to different
    ids depending on which casing a caller (or environment) happens to pass in. #}
-{% set identifier_path = (database ~ '.' ~ schema ~ '.' ~ identifier) | lower %}
+{# `freeze_name`, when set, stands in for `identifier` in the hashed path only, so a warehouse
+   rename doesn't re-id the table. `source.path` and default formulas still use the real
+   `identifier`, since those must match the live catalog. Unset/empty falls back to it. #}
+{% set freeze_identifier = freeze_name or identifier %}
+{% set identifier_path = (database ~ '.' ~ schema ~ '.' ~ freeze_identifier) | lower %}
 {% set freeze_scope = key ~ '@' ~ identifier_path %}
 
 {% if not columns %}
