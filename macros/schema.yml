@@ -91,9 +91,15 @@ macros:
       - name: page
         type: string
         description: Name of the page this table should appear on within a multi-page model. Tables sharing the same `page=` value are grouped together; pages are emitted in first-appearance order across the `tables` list. Omit (or leave `none`) to place this table on the default page, named by `page_name` on `sigma_data_models.model()` (falling back to the model's `name`).
+      - name: freeze_name
+        type: string
+        description: Name hashed in place of `identifier` when freezing ids (lowercased, like `identifier`). Set it to the table's previous name when renaming a warehouse table so every table, column, metric, folder and filter id stays unchanged; setting it to the current name pins today's ids ahead of a rename. Affects ids only - `source.path` and default passthrough formulas keep using the real `identifier`. `none` or empty string (default) hashes `identifier`. `database` and `schema` still participate in the hash unless pinned with `freeze_database` / `freeze_schema`.
+      - name: freeze_schema
+        type: string
+        description: Schema hashed in place of `schema` when freezing ids (lowercased, like `schema`). Set it to the table's previous schema when moving a table between schemas so every table, column, metric, folder and filter id stays unchanged; setting it to the current schema pins today's ids ahead of a move. Applies to the resolved schema, so it also works when `schema` defaulted from `target.schema` (e.g. to make dev and prod compile to the same ids). Affects ids only - `source.path` keeps the real schema. `none` or empty string (default) hashes the real schema. `database` and `identifier` still participate in the hash unless pinned with `freeze_database` / `freeze_name`.
       - name: freeze_database
         type: string
-        description: Database hashed in place of `database` when freezing ids (lowercased, like `database`). Set it to the table's previous database when moving a table between databases so every table, column, metric, folder and filter id stays unchanged; setting it to the current database pins today's ids ahead of a move. Applies to the resolved database, so it also works when `database` defaulted from `target.database`. Affects ids only - `source.path` keeps the real database. `none` or empty string (default) hashes `database`. `schema`/`identifier` still participate in the hash.
+        description: Database hashed in place of `database` when freezing ids (lowercased, like `database`). Set it to the table's previous database when moving a table between databases so every table, column, metric, folder and filter id stays unchanged; setting it to the current database pins today's ids ahead of a move. Applies to the resolved database, so it also works when `database` defaulted from `target.database`. Affects ids only - `source.path` keeps the real database. `none` or empty string (default) hashes `database`. `schema` and `identifier` still participate in the hash unless pinned with `freeze_schema` / `freeze_name`.
 
   - name: column
     description: |

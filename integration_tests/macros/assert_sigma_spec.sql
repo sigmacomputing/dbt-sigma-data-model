@@ -572,6 +572,97 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: model with no connection_tags must have empty _connection_tags list') %}
 {% endif %}
 
+{# freeze_name: pins ids across a simulated warehouse rename. #}
+{% set hn_base = sigma_data_models.table('hn', identifier='accounts', columns=['account_guid'],
+  metrics={'n': 'Count()'}, folders=[sigma_data_models.folder('F', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a']})]) %}
+{% set hn_renamed = sigma_data_models.table('hn', identifier='accounts_v2', columns=['account_guid'],
+  metrics={'n': 'Count()'}, folders=[sigma_data_models.folder('F', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a']})]) %}
+{% set hn_pinned = sigma_data_models.table('hn', identifier='accounts_v2', freeze_name='ACCOUNTS',
+  columns=['account_guid'], metrics={'n': 'Count()'},
+  folders=[sigma_data_models.folder('F', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a']})]) %}
+{% if hn_renamed.id == hn_base.id or hn_renamed.columns[0].id == hn_base.columns[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a rename without freeze_name must change ids') %}
+{% endif %}
+{% if hn_pinned.id != hn_base.id or hn_pinned.columns[0].id != hn_base.columns[0].id
+   or hn_pinned.metrics[0].id != hn_base.metrics[0].id or hn_pinned.folders[0].id != hn_base.folders[0].id
+   or hn_pinned.filters[0].id != hn_base.filters[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_name set to the old name must keep table/column/metric/folder/filter ids') %}
+{% endif %}
+{% if hn_pinned.source.path[2] != 'accounts_v2' or hn_pinned.columns[0].formula != '[accounts_v2/Account Guid]' %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_name must not affect source.path or the default formula, got ' ~ hn_pinned.source.path ~ ' / ' ~ hn_pinned.columns[0].formula) %}
+{% endif %}
+{% set hn_same = sigma_data_models.table('hn', identifier='accounts', freeze_name='accounts', columns=['account_guid']) %}
+{% set hn_empty = sigma_data_models.table('hn', identifier='accounts', freeze_name='', columns=['account_guid']) %}
+{% if hn_same.id != hn_base.id or hn_empty.id != hn_base.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_name equal to identifier, or empty, must be a no-op') %}
+{% endif %}
+{% set hn_other_key = sigma_data_models.table('hn2', identifier='accounts_v2', freeze_name='accounts', columns=['account_guid']) %}
+{% if hn_other_key.id == hn_pinned.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: key must still participate in ids when freeze_name is set') %}
+{% endif %}
+{% set hn_other_schema = sigma_data_models.table('hn', identifier='accounts_v2', freeze_name='accounts', schema='other_schema', columns=['account_guid']) %}
+{% if hn_other_schema.id == hn_pinned.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: schema must still participate in ids when freeze_name is set') %}
+{% endif %}
+
+{# freeze_schema: pins ids across a simulated schema move. #}
+{% set fs_base = sigma_data_models.table('fs', identifier='accounts', database='db', schema='sch', columns=['account_guid'],
+  metrics={'n': 'Count()'}, folders=[sigma_data_models.folder('F', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a']})]) %}
+{% set fs_moved = sigma_data_models.table('fs', identifier='accounts', database='db', schema='sch_new', columns=['account_guid'],
+  metrics={'n': 'Count()'}, folders=[sigma_data_models.folder('F', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a']})]) %}
+{% set fs_pinned = sigma_data_models.table('fs', identifier='accounts', database='db', schema='sch_new', freeze_schema='SCH',
+  columns=['account_guid'], metrics={'n': 'Count()'},
+  folders=[sigma_data_models.folder('F', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a']})]) %}
+{% if fs_moved.id == fs_base.id or fs_moved.columns[0].id == fs_base.columns[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a schema move without freeze_schema must change ids') %}
+{% endif %}
+{% if fs_pinned.id != fs_base.id or fs_pinned.columns[0].id != fs_base.columns[0].id
+   or fs_pinned.metrics[0].id != fs_base.metrics[0].id or fs_pinned.folders[0].id != fs_base.folders[0].id
+   or fs_pinned.filters[0].id != fs_base.filters[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_schema set to the old schema (any casing) must keep table/column/metric/folder/filter ids') %}
+{% endif %}
+{% if fs_pinned.source.path != ['db', 'sch_new', 'accounts'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_schema must not affect source.path, got ' ~ fs_pinned.source.path) %}
+{% endif %}
+{% set fs_same = sigma_data_models.table('fs', identifier='accounts', database='db', schema='sch', freeze_schema='sch', columns=['account_guid']) %}
+{% set fs_empty = sigma_data_models.table('fs', identifier='accounts', database='db', schema='sch', freeze_schema='', columns=['account_guid']) %}
+{% if fs_same.id != fs_base.id or fs_empty.id != fs_base.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_schema equal to schema, or empty, must be a no-op') %}
+{% endif %}
+{% set fs_default = sigma_data_models.table('fs', identifier='accounts', database='db', freeze_schema=target.schema, columns=['account_guid']) %}
+{% set fs_default_ref = sigma_data_models.table('fs', identifier='accounts', database='db', schema=target.schema, columns=['account_guid']) %}
+{% if fs_default.id != fs_default_ref.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_schema must also apply when schema defaults from target') %}
+{% endif %}
+{% set fs_other_db = sigma_data_models.table('fs', identifier='accounts', database='other_db', schema='sch_new', freeze_schema='sch', columns=['account_guid']) %}
+{% if fs_other_db.id == fs_pinned.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: database must still participate in ids when freeze_schema is set') %}
+{% endif %}
+{% set fs_other_ident = sigma_data_models.table('fs', identifier='accounts_v2', database='db', schema='sch_new', freeze_schema='sch', columns=['account_guid']) %}
+{% if fs_other_ident.id == fs_pinned.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: identifier must still participate in ids when freeze_schema is set') %}
+{% endif %}
+{% set fs_other_key = sigma_data_models.table('fs2', identifier='accounts', database='db', schema='sch_new', freeze_schema='sch', columns=['account_guid']) %}
+{% if fs_other_key.id == fs_pinned.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: key must still participate in ids when freeze_schema is set') %}
+{% endif %}
+
+{# freeze_name + freeze_schema compose: a rename and a schema move together keep ids. #}
+{% set fb_both = sigma_data_models.table('fs', identifier='accounts_v2', database='db', schema='sch_new', freeze_name='ACCOUNTS', freeze_schema='SCH', columns=['account_guid']) %}
+{% if fb_both.id != fs_base.id or fb_both.columns[0].id != fs_base.columns[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_name and freeze_schema together must keep ids across a rename plus a schema move') %}
+{% endif %}
+{% set fb_name_only = sigma_data_models.table('fs', identifier='accounts_v2', database='db', schema='sch_new', freeze_name='ACCOUNTS', columns=['account_guid']) %}
+{% if fb_name_only.id == fs_base.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_name alone must not hold ids across a schema move') %}
+{% endif %}
+
 {# freeze_database: pins ids across a simulated database move. #}
 {% set fd_metrics = {'n': 'Count()'} %}
 {% set fd_folders = [sigma_data_models.folder('F', columns=['account_guid'])] %}
@@ -614,6 +705,18 @@
 {% set fd_self_b = sigma_data_models.table('managers', identifier='emp', database='DB_NEW', schema='sch', freeze_database='DB', columns=['account_guid']) %}
 {% if fd_self_a.id == fd_self_b.id or fd_self_a.columns[0].id == fd_self_b.columns[0].id %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: a self-join with freeze_database set must still get distinct ids per key') %}
+{% endif %}
+
+{# All three pins together reproduce the original ids after a simultaneous database, schema and name change. #}
+{% set fd_all_base = sigma_data_models.table('fdall', identifier='accounts', database='db', schema='sch', columns=['account_guid']) %}
+{% set fd_all_pinned = sigma_data_models.table('fdall', identifier='accounts_v2', database='DB_NEW', schema='SCH_NEW', freeze_database='DB', freeze_schema='SCH', freeze_name='ACCOUNTS', columns=['account_guid']) %}
+{% if fd_all_pinned.id != fd_all_base.id or fd_all_pinned.columns[0].id != fd_all_base.columns[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_database, freeze_schema and freeze_name together must reproduce the original ids') %}
+{% endif %}
+{# freeze_database alone does not hold ids across a schema move, and vice versa. #}
+{% set fd_alone = sigma_data_models.table('fdall', identifier='accounts', database='DB_NEW', schema='SCH_NEW', freeze_database='DB', columns=['account_guid']) %}
+{% if fd_alone.id == fd_all_base.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: freeze_database alone must not hold ids across a schema move') %}
 {% endif %}
 
 {{ log('assert_sigma_spec: all assertions passed', info=true) }}

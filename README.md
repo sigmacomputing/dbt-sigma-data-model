@@ -370,6 +370,26 @@ The identifier portion is lowercased before hashing, so the same physical table 
 
 What this does **not** guarantee for the ids this package *does* freeze (table/column/metric/folder/filter/relationship): Sigma-side permanence. Per Sigma's own docs, on the first live sync Sigma may assign its own internal id to an element, independent of what's frozen here — the only way to learn the real id is a round trip against the live API, which is outside what a dbt macro can do at compile time. So treat `freeze_id` as a guarantee of *compile-time* determinism (no diff noise across recompiles), not a promise that the id you see in `manifest.json` is the one Sigma ends up using.
 
+### Renaming a warehouse table without changing ids
+
+Ids hash the physical identifier, so renaming a table (a dbt model rename, an `alias` change) re-ids it and everything under it, orphaning anything that references those ids. Pass `freeze_name` with the table's previous name to keep the ids stable:
+
+```sql
+sigma_data_models.table('accounts', 'ACCOUNTS_V2', freeze_name='ACCOUNTS', columns=[...])
+```
+
+`freeze_name` replaces `identifier` in the hashed path only (lowercased the same way); `source.path` and default passthrough formulas still use the real `identifier`. Setting it to the table's *current* name pins today's ids, so it can be added before a rename ships. `database` and `schema` still participate in the hash unless pinned with `freeze_database` / `freeze_schema` (below); the pins compose.
+
+### Moving a table between schemas without changing ids
+
+Ids hash the physical schema, so moving a table (a warehouse migration, a schema reorganisation) re-ids it and everything under it, orphaning anything that references those ids. The same applies across environments when `schema` is omitted: it defaults to `target.schema`, so dev and prod compile to different ids. Pass `freeze_schema` with the table's previous (or production) schema to keep the ids stable:
+
+```sql
+sigma_data_models.table('accounts', 'ACCOUNTS', database='DB', schema='SCH_NEW', freeze_schema='SCH', columns=[...])
+```
+
+`freeze_schema` replaces the schema in the hashed path only (lowercased the same way); `source.path` still uses the real schema. Setting it to the table's *current* schema pins today's ids, so it can be added before a move ships. `database` and `identifier` still participate in the hash unless pinned with `freeze_database` / `freeze_name`.
+
 ### Moving a table to another database without changing ids
 
 Ids hash the physical database, so moving a table (a warehouse migration, a database clone or rename) re-ids it and everything under it, orphaning anything that references those ids. Pass `freeze_database` with the table's previous database to keep the ids stable:
@@ -378,7 +398,7 @@ Ids hash the physical database, so moving a table (a warehouse migration, a data
 sigma_data_models.table('accounts', 'ACCOUNTS', database='DB_NEW', schema='SCH', freeze_database='DB', columns=[...])
 ```
 
-`freeze_database` replaces `database` in the hashed path only (lowercased the same way). It applies to the resolved value, so it also works when `database` is omitted and defaults from `target.database` — which makes the same model compile to the same ids in dev and prod. `source.path` still uses the real database. Setting it to the table's *current* database pins today's ids, so it can be added before a move ships. `schema` and `identifier` still participate in the hash.
+`freeze_database` replaces `database` in the hashed path only (lowercased the same way). It applies to the resolved value, so it also works when `database` is omitted and defaults from `target.database` — which makes the same model compile to the same ids in dev and prod. `source.path` still uses the real database. Setting it to the table's *current* database pins today's ids, so it can be added before a move ships. `schema` and `identifier` still participate in the hash unless pinned with `freeze_schema` / `freeze_name`; the pins compose.
 
 `connection_id`/`folder_id` default to the `sigma_connection_id`/`sigma_folder_id` project vars (set once for the org/workspace), and can be overridden per table (`connection_id`) or per model (`folder_id`):
 
